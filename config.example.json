@@ -1,0 +1,4 @@
+{
+  "ollama_url": "http://YOUR-SERVER-NAME-OR-IP:11434",
+  "model": "llama3.2:3b"
+}
