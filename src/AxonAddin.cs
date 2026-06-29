@@ -194,24 +194,27 @@ namespace Axon.OutlookAddin
 
         private class Filing { public string[] matches = new string[0]; public string newFolder = ""; }
 
-        // Suggest folders via the company's on-site Ollama server — email content stays on the
-        // network (never sent to a cloud API). If the server is unreachable the picker still shows
-        // every folder; only the AI suggestions are skipped.
+        // Suggest folders via an OpenAI-COMPATIBLE chat API. `api_base` can point at OpenAI's cloud
+        // or any local server that speaks the same protocol (Ollama, vLLM, LM Studio, LocalAI, ...),
+        // so the same add-in works for cloud or fully on-site deployments — only the config differs.
+        // If the API is unreachable the picker still lists every folder; only AI ranking is skipped.
         private Filing SuggestFiling(string subject, string sender, string body, string[] folders)
         {
             var result = new Filing();
-            try { TrySuggestViaOllama(subject, sender, body, folders, result); } catch { }
+            try { TrySuggestViaApi(subject, sender, body, folders, result); } catch { }
             return result;
         }
 
-        private static string _ollamaUrl, _ollamaModel;
+        private static string _apiBase, _apiKey, _model;
 
-        // Read the Ollama server URL + model from %APPDATA%\AxonOutlook\config.json (set by IT at
-        // install time). Defaults to a local Ollama if no config is present.
+        // Config from %APPDATA%\AxonOutlook\config.json: { api_base, api_key, model }. If no api_key
+        // is set there, fall back to the key baked into a co-located Axon app (.env) — that's the
+        // bundled-with-the-dot case. On-site deployments point api_base at their own model server.
         private void LoadConfig()
         {
-            _ollamaUrl = "http://localhost:11434";
-            _ollamaModel = "llama3.2:3b";
+            _apiBase = "https://api.openai.com/v1";
+            _apiKey = "";
+            _model = "gpt-4o-mini";
             try
             {
                 string p = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -220,14 +223,38 @@ namespace Axon.OutlookAddin
                 {
                     var js = new System.Web.Script.Serialization.JavaScriptSerializer();
                     var d = (System.Collections.Generic.Dictionary<string, object>)js.DeserializeObject(File.ReadAllText(p));
-                    if (d.ContainsKey("ollama_url") && d["ollama_url"] != null) _ollamaUrl = d["ollama_url"].ToString().TrimEnd('/');
-                    if (d.ContainsKey("model") && d["model"] != null) _ollamaModel = d["model"].ToString();
+                    if (d.ContainsKey("api_base") && d["api_base"] != null) _apiBase = d["api_base"].ToString().TrimEnd('/');
+                    if (d.ContainsKey("api_key") && d["api_key"] != null) _apiKey = d["api_key"].ToString();
+                    if (d.ContainsKey("model") && d["model"] != null) _model = d["model"].ToString();
                 }
             }
             catch { }
+            if (string.IsNullOrEmpty(_apiKey)) _apiKey = BakedKey();
         }
 
-        private bool TrySuggestViaOllama(string subject, string sender, string body, string[] folders, Filing result)
+        // Read OPENAI_API_KEY from a co-located Axon app's .env (bundled-with-the-dot deployment).
+        private string BakedKey()
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                string root = Path.GetFullPath(Path.Combine(dir, ".."));
+                string[] cands = { Path.Combine(root, "_internal", ".env"), Path.Combine(root, ".env"),
+                                   Path.Combine(root, "assistant", ".env") };
+                foreach (var p in cands)
+                    if (File.Exists(p))
+                        foreach (var line in File.ReadAllLines(p))
+                            if (line.TrimStart().StartsWith("OPENAI_API_KEY"))
+                            {
+                                int i = line.IndexOf('=');
+                                if (i > 0) { string k = line.Substring(i + 1).Trim().Trim('"'); if (k.Length > 10) return k; }
+                            }
+            }
+            catch { }
+            return "";
+        }
+
+        private bool TrySuggestViaApi(string subject, string sender, string body, string[] folders, Filing result)
         {
             try
             {
@@ -244,21 +271,25 @@ namespace Axon.OutlookAddin
                     "folder to create (must NOT be empty in that case); if an existing folder fits, an empty string\"}";
                 var reqObj = new System.Collections.Generic.Dictionary<string, object>
                 {
-                    { "model", _ollamaModel },
+                    { "model", _model },
+                    { "temperature", 0 },
                     { "stream", false },
-                    { "format", "json" },   // make Ollama return strict JSON
                     { "messages", new object[] { new System.Collections.Generic.Dictionary<string, object> { { "role", "user" }, { "content", prompt } } } }
                 };
+                System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
                 using (var http = new System.Net.Http.HttpClient())
                 {
                     http.Timeout = TimeSpan.FromSeconds(60);
+                    if (!string.IsNullOrEmpty(_apiKey))
+                        http.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", "Bearer " + _apiKey);
                     var content = new System.Net.Http.StringContent(js.Serialize(reqObj), System.Text.Encoding.UTF8, "application/json");
-                    var resp = http.PostAsync(_ollamaUrl + "/api/chat", content).Result;
+                    var resp = http.PostAsync(_apiBase + "/chat/completions", content).Result;
                     string s = resp.Content.ReadAsStringAsync().Result;
                     if (!resp.IsSuccessStatusCode) return false;
                     var d = (System.Collections.Generic.Dictionary<string, object>)js.DeserializeObject(s);
-                    var msg = d.ContainsKey("message") ? d["message"] as System.Collections.Generic.Dictionary<string, object> : null;
-                    if (msg == null || !msg.ContainsKey("content") || msg["content"] == null) return false;
+                    var choices = d.ContainsKey("choices") ? d["choices"] as object[] : null;
+                    if (choices == null || choices.Length == 0) return false;
+                    var msg = (System.Collections.Generic.Dictionary<string, object>)((System.Collections.Generic.Dictionary<string, object>)choices[0])["message"];
                     var mt = System.Text.RegularExpressions.Regex.Match(msg["content"].ToString(), "\\{[\\s\\S]*\\}");
                     if (!mt.Success) return false;
                     ParseSuggestion(mt.Value, folders, result, js);

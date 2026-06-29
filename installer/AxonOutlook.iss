@@ -37,28 +37,32 @@ var
 
 procedure InitializeWizard;
 begin
-  UrlPage := CreateInputQueryPage(wpWelcome, 'Model server',
-    'Where is your Ollama server?',
-    'Folder suggestions are produced by your on-site Ollama server. Email content is sent only to ' +
-    'this server and never leaves your network. Enter its address (ask IT if unsure).');
-  UrlPage.Add('Ollama server URL:', False);
-  UrlPage.Values[0] := 'http://localhost:11434';
-end;
-
-function OllamaUrl(): String;
-begin
-  Result := Trim(UrlPage.Values[0]);
-  if Result = '' then Result := 'http://localhost:11434';
+  UrlPage := CreateInputQueryPage(wpWelcome, 'Model API',
+    'Which model API should Axon use?',
+    'Axon sends the email + your folder names to an OpenAI-compatible chat API to suggest a folder. ' +
+    'Point it at your on-site model server (e.g. Ollama http://host:11434/v1, vLLM http://host:8000/v1) ' +
+    'so email stays on your network, or OpenAI (https://api.openai.com/v1). Ask IT if unsure.');
+  UrlPage.Add('API base URL:', False);
+  UrlPage.Add('Model name:', False);
+  UrlPage.Add('API key (blank for most local servers):', False);
+  UrlPage.Values[0] := 'http://YOUR-SERVER:11434/v1';
+  UrlPage.Values[1] := 'qwen2.5:3b';
+  UrlPage.Values[2] := '';
 end;
 
 procedure WriteConfig();
 var
-  dir, path, json: String;
+  dir, path, json, apiBase, model, apiKey: String;
 begin
+  apiBase := Trim(UrlPage.Values[0]);
+  model := Trim(UrlPage.Values[1]);
+  apiKey := Trim(UrlPage.Values[2]);
+  if apiBase = '' then apiBase := 'https://api.openai.com/v1';
+  if model = '' then model := 'qwen2.5:3b';
   dir := ExpandConstant('{userappdata}\AxonOutlook');
   ForceDirectories(dir);
   path := dir + '\config.json';
-  json := '{"ollama_url": "' + OllamaUrl() + '", "model": "llama3.2:3b"}';
+  json := '{"api_base": "' + apiBase + '", "api_key": "' + apiKey + '", "model": "' + model + '"}';
   SaveStringToFile(path, json, False);
 end;
 

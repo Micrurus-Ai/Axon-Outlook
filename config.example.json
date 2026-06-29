@@ -1,4 +1,5 @@
 {
-  "ollama_url": "http://YOUR-SERVER-NAME-OR-IP:11434",
-  "model": "llama3.2:3b"
+  "api_base": "http://YOUR-MODEL-SERVER:11434/v1",
+  "api_key": "",
+  "model": "qwen2.5:3b"
 }

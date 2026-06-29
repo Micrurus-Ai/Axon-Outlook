@@ -1,67 +1,74 @@
 # Axon Outlook add-in
 
 A self-contained Microsoft Outlook add-in that adds **Move** and **Download** buttons to the ribbon
-(and the right-click menu). When you Move an email, it suggests the best subfolder(s) — and offers to
+(and the right-click menu). When you Move an email it suggests the best subfolder(s), and offers to
 create a new one if nothing fits.
 
-**Privacy:** folder suggestions are produced by a **local LLM on your own server (via [Ollama](https://ollama.com))** —
-email content never leaves your network. There is **no cloud API and no API key**. If the server is
-unreachable, Move/Download still work; only the AI suggestions are skipped.
+Suggestions come from an **OpenAI-compatible chat API** that **you point it at** — so the same
+add-in works for:
+- **Fully on-site / private** — a local model server on your network (Ollama, vLLM, LM Studio,
+  LocalAI, …). Email content never leaves your network, no cloud, no per-user key.
+- **Cloud** — OpenAI's API.
 
-This add-in is independent of the Axon desktop app (the floating dot).
+If the API is unreachable, Move/Download still work; only the AI ranking is skipped. This add-in is
+independent of the Axon desktop app (the floating dot).
 
 ---
 
-## 1. Set up the model server (once, by IT)
-
-On a Windows/Linux/Mac server reachable on your LAN:
-
-```bash
-# install Ollama from https://ollama.com, then:
-ollama pull llama3.2:3b          # ~2 GB; a small, fast model that's plenty for folder filing
-# expose it on the network (default port 11434):
-#   Windows: set the OLLAMA_HOST environment variable to 0.0.0.0 and restart Ollama
-#   Linux/Mac: OLLAMA_HOST=0.0.0.0 ollama serve
-```
-
-Make sure TCP **11434** is open to the office network. Test from a client PC:
-
-```
-curl http://YOUR-SERVER:11434/api/tags
-```
-
-Other small models work too (e.g. `qwen2.5:3b`, `phi3:mini`) — set the name in the client config.
-
-## 2. Client config
+## How it decides where to send the request
 
 Each PC reads `%APPDATA%\AxonOutlook\config.json`:
 
 ```json
-{ "ollama_url": "http://YOUR-SERVER:11434", "model": "llama3.2:3b" }
+{ "api_base": "http://YOUR-SERVER:11434/v1", "api_key": "", "model": "qwen2.5:3b" }
 ```
 
-The installer writes this for you (it asks for the server URL). See `config.example.json`.
+- **`api_base`** — any OpenAI-compatible endpoint. Examples:
+  - Ollama: `http://host:11434/v1`
+  - vLLM: `http://host:8000/v1`
+  - LM Studio: `http://host:1234/v1`
+  - OpenAI: `https://api.openai.com/v1`
+- **`api_key`** — blank for most local servers; your key for OpenAI.
+- **`model`** — e.g. `qwen2.5:3b` (recommended local), `llama3.2:3b`, or `gpt-4o-mini` for OpenAI.
 
-## 3. Install (end users)
+The installer writes this for you (it asks for the three values). See `config.example.json`.
 
-Run **`AxonOutlook-Setup.exe`**, enter your Ollama server URL when asked, then restart Outlook.
+> If there's no `config.json` and the add-in is sitting next to an Axon desktop app, it falls back
+> to that app's baked-in OpenAI key — that's the bundled-with-the-dot case.
+
+## 1. Set up a local model server (recommended, by IT)
+
+On a machine reachable on your LAN, run any OpenAI-compatible server. Easiest is
+[Ollama](https://ollama.com):
+
+```bash
+ollama pull qwen2.5:3b            # small, fast, strong multilingual — great for folder filing
+# expose on the network: set OLLAMA_HOST=0.0.0.0, then run `ollama serve`
+```
+
+Its OpenAI-compatible endpoint is `http://THAT-MACHINE:11434/v1`. Open TCP 11434 to the office.
+Test from a client: `curl http://THAT-MACHINE:11434/v1/models`.
+
+## 2. Install (end users)
+
+Run **`AxonOutlook-Setup.exe`**, enter the API base URL + model when asked, then restart Outlook.
 The **Move** and **Download** buttons appear automatically. No admin rights needed.
 
-## 4. Build & test (developers)
+## 3. Build & test (developers)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File build.ps1       # compile AxonAddin.dll (closes Outlook)
 powershell -ExecutionPolicy Bypass -File register.ps1    # register for the current user
-# create %APPDATA%\AxonOutlook\config.json (copy config.example.json), then start Outlook
+# create %APPDATA%\AxonOutlook\config.json (see config.example.json), then start Outlook
 ```
 
-`unregister.ps1` removes it. To build the installer, compile `installer\AxonOutlook.iss` with
+`unregister.ps1` removes it. Build the installer by compiling `installer\AxonOutlook.iss` with
 [Inno Setup](https://jrsoftware.org/isdl.php) (`ISCC.exe`).
 
 ## Layout
 
 ```
-src/AxonAddin.cs        the add-in (ribbon, dialogs, Ollama suggestion call)
+src/AxonAddin.cs        the add-in (ribbon, dialogs, OpenAI-compatible suggestion call)
 icons/                  ribbon icons
 build.ps1               compile the DLL
 register.ps1 / unregister.ps1   per-user COM registration (dev)
