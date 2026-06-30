@@ -24,8 +24,11 @@ ArchitecturesInstallIn64BitMode=x64compatible
 
 [Files]
 Source: "..\AxonAddin.dll";          DestDir: "{app}"; Flags: ignoreversion
-Source: "..\icons\axon-move.png";     DestDir: "{app}"; Flags: ignoreversion
-Source: "..\icons\axon-download.png"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\icons\axon-move.png";      DestDir: "{app}"; Flags: ignoreversion
+Source: "..\icons\axon-download.png";  DestDir: "{app}"; Flags: ignoreversion
+Source: "..\icons\axon-summarize.png"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\icons\axon-reply.png";     DestDir: "{app}"; Flags: ignoreversion
+Source: "..\icons\axon-schedule.png";  DestDir: "{app}"; Flags: ignoreversion
 
 [Code]
 const
