@@ -31,6 +31,7 @@ Source: "..\icons\axon-reply.png";     DestDir: "{app}"; Flags: ignoreversion
 Source: "..\icons\axon-schedule.png";  DestDir: "{app}"; Flags: ignoreversion
 Source: "..\icons\axon-followup.png";  DestDir: "{app}"; Flags: ignoreversion
 Source: "..\icons\axon-sendlater.png"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\icons\axon-write.png";     DestDir: "{app}"; Flags: ignoreversion
 
 [Code]
 const
