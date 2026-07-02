@@ -29,6 +29,8 @@ Source: "..\icons\axon-download.png";  DestDir: "{app}"; Flags: ignoreversion
 Source: "..\icons\axon-summarize.png"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\icons\axon-reply.png";     DestDir: "{app}"; Flags: ignoreversion
 Source: "..\icons\axon-schedule.png";  DestDir: "{app}"; Flags: ignoreversion
+Source: "..\icons\axon-followup.png";  DestDir: "{app}"; Flags: ignoreversion
+Source: "..\icons\axon-sendlater.png"; DestDir: "{app}"; Flags: ignoreversion
 
 [Code]
 const
